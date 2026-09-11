@@ -1,0 +1,19 @@
+# Build output
+Builds/
+.vs/
+*.obj
+*.pdb
+*.ilk
+*.lib
+*.exp
+*.dll
+*.exe
+*.user
+
+# IDE
+.idea/
+.vscode/
+
+# OS junk
+Thumbs.db
+.DS_Store
