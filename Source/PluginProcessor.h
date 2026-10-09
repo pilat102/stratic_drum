@@ -44,17 +44,20 @@ public:
     void clearSample(int voice);
     String getSampleName(int voice) const { return sampleNames[voice]; }
 
+    static const int NUM_VOICES = 16;
+
     static const char* factoryPresetNames[];
     static const int factoryPresetCount;
     static String voiceParamId(int voice, const char* base);
-    static const char* voiceNames[12];
+    static const char* voiceNames[];
     static const char* paramBaseAt(int p);
-    static int paramCount() { return 31; }
+    static int paramCount() { return 32; }
 
     AudioProcessorValueTreeState apvts;
     static AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
-    int midiNoteMap[12] = { 36, 38, 42, 46, 41, 43, 45, 49, 51, 39, 37, 56 };
+    int midiNoteMap[16] = { 36, 38, 42, 46, 41, 43, 45, 49,
+                            51, 39, 37, 56, 70, 64, 75, 35 };
 
 private:
     struct Voice
@@ -70,21 +73,36 @@ private:
         float smpDir = 1.0f;
         bool  smpActive = false;
         float vel = 1.0f;
+        float age = 0.0f;
         bool  active = false;
     };
 
-    Voice voices[12];
-    AudioBuffer<float> sampleBuffers[12];
-    double sampleRates[12];
-    String sampleNames[12];
-    String samplePaths[12];
+    Voice voices[16];
+    AudioBuffer<float> sampleBuffers[16];
+    double sampleRates[16];
+    String sampleNames[16];
+    String samplePaths[16];
+
+    // ---- Master FX state ----
+    struct Comb { std::vector<float> buf; int idx = 0; float lp = 0.0f; };
+    struct AllPass { std::vector<float> buf; int idx = 0; };
+
+    std::vector<float> chorBuf, dlyBuf;
+    int chorPos = 0, dlyPos = 0;
+    float chorPhase = 0.0f;
+    Comb combs[8];
+    AllPass aps[4];
+    float revFeedback = 0.84f;
+    float compEnv = 0.0f;
+
+    float processReverbSample(float in);
 
     double sampleRate = 44100.0;
     Random random;
     int learnTarget = -1;
 
-    static const int P_COUNT = 31;
-    std::atomic<float>* params[12][P_COUNT];
+    static const int P_COUNT = 32;
+    std::atomic<float>* params[16][P_COUNT];
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LPDrumMachineAudioProcessor)
 };

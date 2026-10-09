@@ -7,20 +7,22 @@ using namespace juce;
 
 static constexpr float twoPi = 2.0f * MathConstants<float>::pi;
 static constexpr float quarterPi = 0.25f * MathConstants<float>::pi;
+static const int NV = LPDrumMachineAudioProcessor::NUM_VOICES;
 
-const char* LPDrumMachineAudioProcessor::voiceNames[12] = {
+const char* LPDrumMachineAudioProcessor::voiceNames[] = {
     "KICK", "SNARE", "HH CL", "HH OP",
     "TOM L", "TOM M", "TOM H",
-    "CRASH", "RIDE", "CLAP", "RIM", "COWBELL"
+    "CRASH", "RIDE", "CLAP", "RIM", "COWBELL",
+    "SHKR", "CONGA", "WBLK", "SUB"
 };
 
-static const char* bases[31] = {
+static const char* bases[32] = {
     "vol", "o1w", "o1p", "o1l", "o2w", "o2p", "o2l", "nz", "ft",
     "fc", "res", "fenv", "fdec", "atk", "dec", "penv", "pdec",
     "lfor", "lfos", "lfod", "lfot",
     "fxd", "fxb", "fxm",
     "smpl", "smpr", "smprv", "smpoff", "smploop",
-    "pan", "chk"
+    "pan", "chk", "clk"
 };
 
 const char* LPDrumMachineAudioProcessor::paramBaseAt(int p)
@@ -35,27 +37,31 @@ enum PIdx
     P_LFOR, P_LFOS, P_LFOD, P_LFOT,
     P_FXD, P_FXB, P_FXM,
     P_SMPL, P_SMPR, P_SMPRV, P_SMPOFF, P_SMPLOOP,
-    P_PAN, P_CHK
+    P_PAN, P_CHK, P_CLK
 };
 
 struct VDef {
     int o1w; float o1p, o1l; int o2w; float o2p, o2l; float nz;
-    int ft; float fc, res, fenv, fdec, atk, dec, penv, pdec, vol;
+    int ft; float fc, res, fenv, fdec, atk, dec, penv, pdec, vol, clk;
 };
 
-static const VDef vdefs[12] = {
-    { 0,  50.0f, 1.0f,  0, 200.0f, 0.0f,  0.00f, 0,  8000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.30f, 120.0f, 0.06f, 0.95f },
-    { 1, 180.0f, 0.5f,  0, 200.0f, 0.0f,  0.80f, 0,  9000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.15f,   0.0f, 0.05f, 0.90f },
-    { 0, 200.0f, 0.0f,  0, 200.0f, 0.0f,  1.00f, 1,  7000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.05f,   0.0f, 0.05f, 0.60f },
-    { 0, 200.0f, 0.0f,  0, 200.0f, 0.0f,  1.00f, 1,  6000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.40f,   0.0f, 0.05f, 0.55f },
-    { 0,  90.0f, 1.0f,  0, 200.0f, 0.0f,  0.05f, 0,  5000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.40f,  60.0f, 0.05f, 0.85f },
-    { 0, 130.0f, 1.0f,  0, 200.0f, 0.0f,  0.05f, 0,  5000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.35f,  60.0f, 0.05f, 0.85f },
-    { 0, 170.0f, 1.0f,  0, 200.0f, 0.0f,  0.05f, 0,  6000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.30f,  60.0f, 0.05f, 0.85f },
-    { 0, 200.0f, 0.0f,  0, 200.0f, 0.0f,  1.00f, 1,  5000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 1.20f,   0.0f, 0.05f, 0.70f },
-    { 3, 300.0f, 0.15f, 0, 200.0f, 0.0f,  1.00f, 1,  6000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.80f,   0.0f, 0.05f, 0.50f },
-    { 0, 200.0f, 0.0f,  0, 200.0f, 0.0f,  1.00f, 2,  1500.0f, 2.0f,    0.0f, 0.10f, 0.001f, 0.25f,   0.0f, 0.05f, 0.80f },
-    { 3, 400.0f, 0.6f,  0, 200.0f, 0.0f,  0.30f, 0,  6000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.06f,   0.0f, 0.05f, 0.60f },
-    { 3, 550.0f, 0.7f,  3, 820.0f, 0.5f,  0.00f, 0,  8000.0f, 0.7f,    0.0f, 0.10f, 0.001f, 0.25f,   0.0f, 0.05f, 0.55f }
+static const VDef vdefs[16] = {
+    { 0,  50.0f, 1.0f,  0, 200.0f, 0.0f,  0.00f, 0,  8000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.30f, 120.0f, 0.06f, 0.95f, 0.30f },
+    { 1, 180.0f, 0.5f,  0, 200.0f, 0.0f,  0.80f, 0,  9000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.15f,   0.0f, 0.05f, 0.90f, 0.25f },
+    { 0, 200.0f, 0.0f,  0, 200.0f, 0.0f,  1.00f, 1,  7000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.05f,   0.0f, 0.05f, 0.60f, 0.00f },
+    { 0, 200.0f, 0.0f,  0, 200.0f, 0.0f,  1.00f, 1,  6000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.40f,   0.0f, 0.05f, 0.55f, 0.00f },
+    { 0,  90.0f, 1.0f,  0, 200.0f, 0.0f,  0.05f, 0,  5000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.40f,  60.0f, 0.05f, 0.85f, 0.15f },
+    { 0, 130.0f, 1.0f,  0, 200.0f, 0.0f,  0.05f, 0,  5000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.35f,  60.0f, 0.05f, 0.85f, 0.15f },
+    { 0, 170.0f, 1.0f,  0, 200.0f, 0.0f,  0.05f, 0,  6000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.30f,  60.0f, 0.05f, 0.85f, 0.15f },
+    { 0, 200.0f, 0.0f,  0, 200.0f, 0.0f,  1.00f, 1,  5000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 1.20f,   0.0f, 0.05f, 0.70f, 0.00f },
+    { 3, 300.0f, 0.15f, 0, 200.0f, 0.0f,  1.00f, 1,  6000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.80f,   0.0f, 0.05f, 0.50f, 0.00f },
+    { 0, 200.0f, 0.0f,  0, 200.0f, 0.0f,  1.00f, 2,  1500.0f, 2.0f, 0.0f, 0.10f, 0.001f, 0.25f,   0.0f, 0.05f, 0.80f, 0.10f },
+    { 3, 400.0f, 0.6f,  0, 200.0f, 0.0f,  0.30f, 0,  6000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.06f,   0.0f, 0.05f, 0.60f, 0.20f },
+    { 3, 550.0f, 0.7f,  3, 820.0f, 0.5f,  0.00f, 0,  8000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.25f,   0.0f, 0.05f, 0.55f, 0.00f },
+    { 0, 200.0f, 0.0f,  0, 200.0f, 0.0f,  1.00f, 1,  8000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.04f,   0.0f, 0.05f, 0.50f, 0.00f },
+    { 0, 220.0f, 1.0f,  0, 200.0f, 0.0f,  0.05f, 0,  4000.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.25f,  60.0f, 0.05f, 0.80f, 0.20f },
+    { 0, 200.0f, 0.0f,  3, 1200.0f, 0.8f, 0.00f, 2, 2500.0f, 3.0f, 0.0f, 0.10f, 0.001f, 0.05f,   0.0f, 0.05f, 0.60f, 0.00f },
+    { 0,  35.0f, 1.0f,  0, 200.0f, 0.0f,  0.00f, 0,   500.0f, 0.7f, 0.0f, 0.10f, 0.001f, 0.50f,  60.0f, 0.06f, 0.90f, 0.00f }
 };
 
 String LPDrumMachineAudioProcessor::voiceParamId(int voice, const char* base)
@@ -79,7 +85,7 @@ LPDrumMachineAudioProcessor::LPDrumMachineAudioProcessor()
         .withOutput("Output", AudioChannelSet::stereo(), true)),
     apvts(*this, nullptr, "Parameters", createParameterLayout())
 {
-    for (int v = 0; v < 12; ++v)
+    for (int v = 0; v < NV; ++v)
     {
         sampleRates[v] = 44100.0;
         for (int p = 0; p < P_COUNT; ++p)
@@ -114,6 +120,16 @@ AudioProcessorValueTreeState::ParameterLayout LPDrumMachineAudioProcessor::creat
     add("master_volume", "Master Volume", 0.0f, 1.0f, 0.85f);
     add("drive", "Drive", 0.0f, 2.0f, 1.3f);
 
+    add("chor_mix", "Chorus Mix", 0.0f, 1.0f, 0.0f);
+    add("chor_rate", "Chorus Rate", 0.1f, 5.0f, 0.8f);
+    add("chor_depth", "Chorus Depth", 0.0f, 1.0f, 0.4f);
+    add("dly_mix", "Delay Mix", 0.0f, 1.0f, 0.0f);
+    add("dly_time", "Delay Time", 0.02f, 0.6f, 0.25f);
+    add("dly_fdb", "Delay Fdb", 0.0f, 0.85f, 0.35f);
+    add("rev_mix", "Reverb Mix", 0.0f, 1.0f, 0.0f);
+    add("rev_size", "Reverb Size", 0.1f, 1.0f, 0.5f);
+    add("comp_amt", "Comp", 0.0f, 1.0f, 0.3f);
+
     const StringArray waves{ "Sine", "Tri", "Saw", "Square" };
     const StringArray filts{ "LP", "HP", "BP" };
     const StringArray targets{ "Off", "Cutoff", "Pitch", "Volume" };
@@ -121,7 +137,7 @@ AudioProcessorValueTreeState::ParameterLayout LPDrumMachineAudioProcessor::creat
     const StringArray revs{ "Fwd", "Rev" };
     const StringArray loops{ "Off", "Loop" };
 
-    for (int v = 0; v < 12; ++v)
+    for (int v = 0; v < NV; ++v)
     {
         const auto& d = vdefs[v];
         String n = String(voiceNames[v]) + " ";
@@ -157,6 +173,7 @@ AudioProcessorValueTreeState::ParameterLayout LPDrumMachineAudioProcessor::creat
         addChoice(voiceParamId(v, "smploop"), n + "Smp Loop", loops, 0);
         add(voiceParamId(v, "pan"), n + "Pan", -1.0f, 1.0f, 0.0f);
         addChoice(voiceParamId(v, "chk"), n + "Choke", chokes, (v == 2 || v == 3) ? 1 : 0);
+        add(voiceParamId(v, "clk"), n + "Click", 0.0f, 1.0f, d.clk);
     }
 
     return { params.begin(), params.end() };
@@ -176,23 +193,73 @@ void LPDrumMachineAudioProcessor::changeProgramName(int, const String&) {}
 void LPDrumMachineAudioProcessor::prepareToPlay(double sr, int)
 {
     sampleRate = sr;
+
+    const int cN = (int)(sr * 0.05) + 4;
+    const int dN = (int)(sr * 0.6) + 4;
+    chorBuf.assign((size_t)cN, 0.0f);
+    dlyBuf.assign((size_t)dN, 0.0f);
+    chorPos = dlyPos = 0;
+    chorPhase = 0.0f;
+
+    const double k = sr / 44100.0;
+    const int combLen[8] = { 1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617 };
+    const int apLen[4] = { 556, 441, 341, 225 };
+    for (int i = 0; i < 8; ++i)
+    {
+        combs[i].buf.assign((size_t)jmax(16, (int)(combLen[i] * k)), 0.0f);
+        combs[i].idx = 0;
+        combs[i].lp = 0.0f;
+    }
+    for (int i = 0; i < 4; ++i)
+    {
+        aps[i].buf.assign((size_t)jmax(8, (int)(apLen[i] * k)), 0.0f);
+        aps[i].idx = 0;
+    }
+    compEnv = 0.0f;
 }
 
 void LPDrumMachineAudioProcessor::releaseResources() {}
+
+float LPDrumMachineAudioProcessor::processReverbSample(float in)
+{
+    float acc = 0.0f;
+
+    for (auto& c : combs)
+    {
+        const int n = (int)c.buf.size();
+        const float o = c.buf[(size_t)c.idx];
+        c.lp = o * 0.5f + c.lp * 0.5f;
+        c.buf[(size_t)c.idx] = in + c.lp * revFeedback;
+        c.idx = (c.idx + 1) % n;
+        acc += o;
+    }
+
+    acc *= 0.12f;
+
+    for (auto& a : aps)
+    {
+        const int n = (int)a.buf.size();
+        const float o = a.buf[(size_t)a.idx];
+        a.buf[(size_t)a.idx] = acc + o * 0.5f;
+        acc = o - acc;
+        a.idx = (a.idx + 1) % n;
+    }
+
+    return acc;
+}
 
 void LPDrumMachineAudioProcessor::startLearning(int drumIndex) { learnTarget = drumIndex; }
 void LPDrumMachineAudioProcessor::stopLearning() { learnTarget = -1; }
 
 void LPDrumMachineAudioProcessor::triggerDrum(int index, float velocity)
 {
-    if (index < 0 || index >= 12)
+    if (index < 0 || index >= NV)
         return;
 
-    // Choke: kill other voices in same group
     const int g = (int)params[index][P_CHK]->load();
     if (g > 0)
     {
-        for (int j = 0; j < 12; ++j)
+        for (int j = 0; j < NV; ++j)
         {
             if (j != index && (int)params[j][P_CHK]->load() == g)
             {
@@ -215,8 +282,8 @@ void LPDrumMachineAudioProcessor::triggerDrum(int index, float velocity)
     v.heldSample = 0.0f;
     v.decimCount = 0;
     v.vel = velocity;
+    v.age = 0.0f;
 
-    // Sample start position: offset or reverse
     const int len = sampleBuffers[index].getNumSamples();
     const int rv = (int)params[index][P_SMPRV]->load();
     const float off = params[index][P_SMPOFF]->load();
@@ -227,7 +294,7 @@ void LPDrumMachineAudioProcessor::triggerDrum(int index, float velocity)
 
 void LPDrumMachineAudioProcessor::resetVoice(int index)
 {
-    if (index < 0 || index >= 12)
+    if (index < 0 || index >= NV)
         return;
 
     const auto& d = vdefs[index];
@@ -241,7 +308,7 @@ void LPDrumMachineAudioProcessor::resetVoice(int index)
         { "lfor", 5.0f }, { "lfod", 0.0f },
         { "fxd", 1.0f },  { "fxb", 16.0f }, { "fxm", 1.0f },
         { "smpl", 0.0f }, { "smpr", 1.0f }, { "smpoff", 0.0f },
-        { "pan", 0.0f }
+        { "pan", 0.0f },  { "clk", d.clk }
     };
 
     for (const auto& p : vals)
@@ -265,17 +332,18 @@ void LPDrumMachineAudioProcessor::resetVoice(int index)
 }
 
 //==============================================================================
-// Presets
+// Presets (voice >= 0 = voice param, voice = -1 = global master FX)
 const char* LPDrumMachineAudioProcessor::factoryPresetNames[] = {
-    "Factory Default", "Linkin Park Kit", "909 Electro", "LoFi Boom Bap"
+    "Factory Default", "Linkin Park Kit", "909 Electro", "LoFi Boom Bap",
+    "Analog 808", "Synthwave Pulse", "Horror Ritual", "Metal Forge"
 };
-const int LPDrumMachineAudioProcessor::factoryPresetCount = 4;
+const int LPDrumMachineAudioProcessor::factoryPresetCount = 8;
 
 struct Ov { int voice; const char* base; float value; };
 
 static const Ov lpKitOv[] = {
-    { 0, "o1p", 48.0f },  { 0, "dec", 0.22f }, { 0, "penv", 130.0f },
-    { 1, "o1p", 210.0f }, { 1, "dec", 0.12f }, { 1, "nz", 0.85f },
+    { 0, "o1p", 48.0f },  { 0, "dec", 0.22f }, { 0, "penv", 130.0f }, { 0, "clk", 0.35f },
+    { 1, "o1p", 210.0f }, { 1, "dec", 0.12f }, { 1, "nz", 0.85f }, { 1, "clk", 0.3f },
     { 2, "vol", 0.55f },  { 2, "dec", 0.04f },
     { 3, "vol", 0.50f },  { 3, "dec", 0.25f },
     { 4, "dec", 0.35f },  { 5, "dec", 0.30f }, { 6, "dec", 0.26f },
@@ -289,7 +357,8 @@ static const Ov electroOv[] = {
     { 9, "res", 3.0f },   { 9, "dec", 0.30f },
     { 9, "fxb", 10.0f },  { 9, "fxm", 2.0f },
     { 11, "dec", 0.30f }, { 11, "vol", 0.60f }, { 11, "fxd", 2.0f },
-    { 6, "lfot", 2.0f },  { 6, "lfod", 0.35f }, { 6, "lfor", 6.0f }
+    { 6, "lfot", 2.0f },  { 6, "lfod", 0.35f }, { 6, "lfor", 6.0f },
+    { -1, "rev_mix", 0.15f }
 };
 
 static const Ov lofiOv[] = {
@@ -297,24 +366,81 @@ static const Ov lofiOv[] = {
     { 1, "fc", 5000.0f }, { 1, "dec", 0.20f }, { 1, "fxb", 10.0f }, { 1, "fxm", 2.0f },
     { 2, "fc", 5000.0f }, { 2, "vol", 0.50f }, { 2, "fxb", 12.0f },
     { 7, "dec", 1.50f },
-    { 8, "lfot", 3.0f },  { 8, "lfod", 0.30f }, { 8, "lfor", 7.0f }
+    { 8, "lfot", 3.0f },  { 8, "lfod", 0.30f }, { 8, "lfor", 7.0f },
+    { -1, "rev_mix", 0.18f }
 };
 
-static const Ov* presetOv[] = { nullptr, lpKitOv, electroOv, lofiOv };
+static const Ov analog808Ov[] = {
+    { 0, "o1p", 40.0f }, { 0, "dec", 0.60f }, { 0, "penv", 180.0f },
+    { 1, "nz", 1.0f },   { 1, "o1l", 0.3f },  { 1, "dec", 0.20f },
+    { 2, "dec", 0.04f }, { 3, "dec", 0.50f },
+    { 4, "dec", 0.50f }, { 5, "dec", 0.45f }, { 6, "dec", 0.40f },
+    { 7, "dec", 1.30f },
+    { 9, "res", 2.5f },  { 9, "dec", 0.25f },
+    { 11, "dec", 0.35f },
+    { -1, "comp_amt", 0.5f }
+};
+
+static const Ov synthwaveOv[] = {
+    { 0, "dec", 0.30f }, { 0, "penv", 100.0f },
+    { 1, "dec", 0.25f }, { 1, "fxb", 12.0f },
+    { 2, "lfot", 3.0f }, { 2, "lfod", 0.6f }, { 2, "lfor", 8.0f }, { 2, "lfos", 3.0f },
+    { 4, "o1w", 2.0f },  { 4, "dec", 0.45f },
+    { 5, "o1w", 2.0f },  { 5, "dec", 0.40f },
+    { 6, "o1w", 2.0f },  { 6, "dec", 0.35f },
+    { 7, "dec", 1.40f },
+    { 8, "lfot", 3.0f }, { 8, "lfod", 0.4f }, { 8, "lfor", 4.0f },
+    { -1, "chor_mix", 0.35f }, { -1, "dly_mix", 0.18f }
+};
+
+static const Ov horrorOv[] = {
+    { 0, "o1p", 35.0f }, { 0, "dec", 0.80f }, { 0, "penv", 60.0f }, { 0, "fc", 1500.0f },
+    { 1, "dec", 0.40f }, { 1, "fc", 3000.0f }, { 1, "fxb", 10.0f },
+    { 4, "o1p", 60.0f }, { 4, "dec", 0.80f }, { 4, "fc", 2000.0f },
+    { 4, "lfot", 2.0f }, { 4, "lfor", 0.5f }, { 4, "lfod", 0.3f },
+    { 5, "o1p", 80.0f }, { 5, "dec", 0.70f }, { 5, "fc", 2000.0f },
+    { 6, "o1p", 100.0f },{ 6, "dec", 0.60f },
+    { 7, "dec", 2.00f },
+    { 11, "o1p", 300.0f }, { 11, "o2w", 3.0f }, { 11, "o2p", 410.0f },
+    { 11, "o2l", 0.5f }, { 11, "dec", 0.6f },
+    { -1, "rev_mix", 0.35f }, { -1, "rev_size", 0.9f },
+    { -1, "dly_mix", 0.12f }, { -1, "dly_time", 0.45f }
+};
+
+static const Ov metalOv[] = {
+    { 0, "o1p", 60.0f }, { 0, "dec", 0.18f }, { 0, "penv", 80.0f },
+    { 0, "clk", 0.5f },  { 0, "fc", 9000.0f }, { 0, "fxd", 1.3f },
+    { 1, "nz", 1.0f },   { 1, "o1l", 0.25f }, { 1, "dec", 0.12f },
+    { 1, "clk", 0.35f }, { 1, "fc", 8000.0f },
+    { 2, "dec", 0.03f }, { 2, "vol", 0.55f },
+    { 3, "dec", 0.20f },
+    { 4, "o1p", 90.0f }, { 4, "dec", 0.30f }, { 4, "clk", 0.2f }, { 4, "fc", 6000.0f },
+    { 5, "o1p", 130.0f },{ 5, "dec", 0.26f }, { 5, "clk", 0.2f },
+    { 6, "o1p", 170.0f },{ 6, "dec", 0.22f }, { 6, "clk", 0.2f },
+    { 7, "dec", 1.10f },
+    { -1, "rev_mix", 0.12f }, { -1, "comp_amt", 0.6f }, { -1, "dly_mix", 0.0f }
+};
+
+static const Ov* presetOv[] = { nullptr, lpKitOv, electroOv, lofiOv,
+                                     analog808Ov, synthwaveOv, horrorOv, metalOv };
 static const int presetOvCount[] = { 0,
                                      numElementsInArray(lpKitOv),
                                      numElementsInArray(electroOv),
-                                     numElementsInArray(lofiOv) };
+                                     numElementsInArray(lofiOv),
+                                     numElementsInArray(analog808Ov),
+                                     numElementsInArray(synthwaveOv),
+                                     numElementsInArray(horrorOv),
+                                     numElementsInArray(metalOv) };
 
-static const float presetDrive[] = { 1.3f, 1.4f, 1.2f, 1.8f };
-static const float presetMaster[] = { 0.85f, 0.85f, 0.80f, 0.80f };
+static const float presetDrive[] = { 1.3f, 1.4f, 1.2f, 1.8f, 1.1f, 1.3f, 1.6f, 1.4f };
+static const float presetMaster[] = { 0.85f, 0.85f, 0.80f, 0.80f, 0.85f, 0.82f, 0.80f, 0.85f };
 
 void LPDrumMachineAudioProcessor::applyFactoryPreset(int index)
 {
     if (index < 0 || index >= factoryPresetCount)
         return;
 
-    for (int v = 0; v < 12; ++v)
+    for (int v = 0; v < NV; ++v)
         resetVoice(v);
 
     auto setP = [this](const String& id, float value)
@@ -326,17 +452,25 @@ void LPDrumMachineAudioProcessor::applyFactoryPreset(int index)
     setP("master_volume", presetMaster[index]);
     setP("drive", presetDrive[index]);
 
+    setP("chor_mix", 0.0f); setP("chor_rate", 0.8f); setP("chor_depth", 0.4f);
+    setP("dly_mix", 0.0f);  setP("dly_time", 0.25f); setP("dly_fdb", 0.35f);
+    setP("rev_mix", 0.0f);  setP("rev_size", 0.5f);  setP("comp_amt", 0.3f);
+
     const Ov* ov = presetOv[index];
     const int count = presetOvCount[index];
     for (int i = 0; i < count; ++i)
-        setP(voiceParamId(ov[i].voice, ov[i].base), ov[i].value);
+    {
+        const String id = (ov[i].voice >= 0) ? voiceParamId(ov[i].voice, ov[i].base)
+            : String(ov[i].base);
+        setP(id, ov[i].value);
+    }
 }
 
 //==============================================================================
 // Samples
 void LPDrumMachineAudioProcessor::loadSampleForVoice(int voice, const File& file)
 {
-    if (voice < 0 || voice >= 12)
+    if (voice < 0 || voice >= NV)
         return;
 
     AudioFormatManager manager;
@@ -374,7 +508,7 @@ void LPDrumMachineAudioProcessor::loadSampleForVoice(int voice, const File& file
 
 void LPDrumMachineAudioProcessor::clearSample(int voice)
 {
-    if (voice < 0 || voice >= 12)
+    if (voice < 0 || voice >= NV)
         return;
 
     voices[voice].smpActive = false;
@@ -386,12 +520,12 @@ void LPDrumMachineAudioProcessor::clearSample(int voice)
 }
 
 //==============================================================================
-// Kit file save/load
+// Kit save/load
 void LPDrumMachineAudioProcessor::saveKitToFile(const File& file)
 {
     auto state = apvts.copyState();
 
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < NV; ++i)
     {
         state.setProperty("midiNote_" + String(i), midiNoteMap[i], nullptr);
         state.setProperty("samplePath_" + String(i), samplePaths[i], nullptr);
@@ -413,7 +547,7 @@ bool LPDrumMachineAudioProcessor::loadKitFromFile(const File& file)
 
     apvts.replaceState(state);
 
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < NV; ++i)
     {
         if (state.hasProperty("midiNote_" + String(i)))
             midiNoteMap[i] = (int)state.getProperty("midiNote_" + String(i));
@@ -436,6 +570,18 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
     const float masterVol = apvts.getRawParameterValue("master_volume")->load();
     const float drive = apvts.getRawParameterValue("drive")->load();
 
+    const float chorMix = apvts.getRawParameterValue("chor_mix")->load();
+    const float chorRate = apvts.getRawParameterValue("chor_rate")->load();
+    const float chorDepth = apvts.getRawParameterValue("chor_depth")->load();
+    const float dlyMix = apvts.getRawParameterValue("dly_mix")->load();
+    const float dlyTime = apvts.getRawParameterValue("dly_time")->load();
+    const float dlyFdb = apvts.getRawParameterValue("dly_fdb")->load();
+    const float revMix = apvts.getRawParameterValue("rev_mix")->load();
+    const float revSize = apvts.getRawParameterValue("rev_size")->load();
+    const float compAmt = apvts.getRawParameterValue("comp_amt")->load();
+
+    revFeedback = 0.70f + 0.25f * revSize;
+
     for (const auto metadata : midiMessages)
     {
         const auto msg = metadata.getMessage();
@@ -452,7 +598,7 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
                 continue;
             }
 
-            for (int i = 0; i < 12; ++i)
+            for (int i = 0; i < NV; ++i)
             {
                 if (midiNoteMap[i] == note)
                 {
@@ -471,7 +617,7 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
     {
         float outL = 0.0f, outR = 0.0f;
 
-        for (int d = 0; d < 12; ++d)
+        for (int d = 0; d < NV; ++d)
         {
             auto& v = voices[d];
 
@@ -504,12 +650,13 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
             const float fxm = params[d][P_FXM]->load();
             const float smpl = params[d][P_SMPL]->load();
             const float smpr = params[d][P_SMPR]->load();
-            const int   smprv [[maybe_unused]] = (int)params[d][P_SMPRV]->load();
             const float smpoff = params[d][P_SMPOFF]->load();
             const int   smploop = (int)params[d][P_SMPLOOP]->load();
             const float pan = params[d][P_PAN]->load();
+            const float clk = params[d][P_CLK]->load();
 
-            // Envelopes
+            v.age += 1.0f / sr;
+
             if (v.envStage == 1)
             {
                 v.ampEnv += 1.0f / jmax(0.0001f, atk * sr);
@@ -525,7 +672,6 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
 
             float vo = 0.0f;
 
-            // Sample layer with reverse / offset / loop
             if (v.smpActive && smpl > 0.001f)
             {
                 const int slen = sampleBuffers[d].getNumSamples();
@@ -575,20 +721,17 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
                 v.smpActive = false;
             }
 
-            // Voice dies when amp env done and sample not sustaining
             if (v.ampEnv <= 0.001f && v.envStage == 2 && (!v.smpActive || smploop == 1))
             {
                 v.active = false;
                 continue;
             }
 
-            // LFO
             v.lfoPhase += lfor / sr;
             if (v.lfoPhase >= 1.0f) v.lfoPhase -= 1.0f;
             const float lfoRaw = waveShape(v.lfoPhase, lfos);
             const float lfo = lfoRaw * lfod;
 
-            // Oscillators
             const float drop = penv * v.pitchEnv;
             const float pitchMul = (lfot == 2) ? (1.0f + lfo * 0.5f) : 1.0f;
             v.o1phase += ((o1p + drop) * pitchMul) / sr;
@@ -597,11 +740,13 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
             if (v.o2phase >= 1.0f) v.o2phase -= 1.0f;
 
             const float noise = random.nextFloat() * 2.0f - 1.0f;
+            const float click = (v.age < 0.002f) ? noise * clk * 2.0f : 0.0f;
+
             const float input = waveShape(v.o1phase, o1w) * o1l
                 + waveShape(v.o2phase, o2w) * o2l
-                + noise * nz;
+                + noise * nz
+                + click;
 
-            // Biquad filter (RBJ)
             float cutoff = jlimit(20.0f, 18000.0f, fc + fenv * v.filtEnv);
             if (lfot == 1)
                 cutoff = jlimit(20.0f, 18000.0f, cutoff * std::exp2(lfo * 3.0f));
@@ -613,9 +758,9 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
             const float alpha = sw / (2.0f * Q);
 
             float b0, b1, b2;
-            if (ft == 1) { b0 = (1.0f + cw) * 0.5f; b1 = -(1.0f + cw); b2 = b0; }   // HP
-            else if (ft == 2) { b0 = alpha;              b1 = 0.0f;         b2 = -alpha; } // BP
-            else { b0 = (1.0f - cw) * 0.5f; b1 = 1.0f - cw;    b2 = b0; }   // LP
+            if (ft == 1) { b0 = (1.0f + cw) * 0.5f; b1 = -(1.0f + cw); b2 = b0; }
+            else if (ft == 2) { b0 = alpha;              b1 = 0.0f;         b2 = -alpha; }
+            else { b0 = (1.0f - cw) * 0.5f; b1 = 1.0f - cw;    b2 = b0; }
 
             const float a0 = 1.0f + alpha;
             b0 /= a0; b1 /= a0; b2 /= a0;
@@ -636,7 +781,6 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
                 v.fy2 = v.fy1; v.fy1 = y0;
             }
 
-            // Per-voice FX: drive -> decimate -> bitcrush
             float s = std::tanh(y0 * fxd);
 
             const int decim = jmax(1, (int)fxm);
@@ -654,25 +798,81 @@ void LPDrumMachineAudioProcessor::processBlock(AudioBuffer<float>& buffer, MidiB
             const float steps = (float)((1 << bits) - 1);
             s = std::round(s * steps) / steps;
 
-            // LFO on volume (tremolo)
             float volEff = vol;
             if (lfot == 3)
                 volEff = vol * (1.0f - lfod * (0.5f - 0.5f * lfoRaw));
 
             vo += s * v.ampEnv * volEff * v.vel;
 
-            // Pan (equal power)
             const float gL = std::cos((pan + 1.0f) * quarterPi);
             const float gR = std::sin((pan + 1.0f) * quarterPi);
             outL += vo * gL;
             outR += vo * gR;
         }
 
-        outL = std::tanh(outL * drive) * masterVol;
-        outR = std::tanh(outR * drive) * masterVol;
+        // ---- Master chain ----
+        float L = std::tanh(outL * drive) * masterVol;
+        float R = std::tanh(outR * drive) * masterVol;
+        const float send = (L + R) * 0.5f;
 
-        left[i] = outL;
-        right[i] = outR;
+        const int cN = (int)chorBuf.size();
+        if (cN > 4 && chorMix > 0.001f)
+        {
+            chorPhase += chorRate / sr;
+            if (chorPhase >= 1.0f) chorPhase -= 1.0f;
+            const float lfo = std::sin(chorPhase * twoPi);
+
+            chorBuf[(size_t)chorPos] = send;
+            const float dt = (0.012f + 0.006f * chorDepth * (lfo * 0.5f + 0.5f)) * sr;
+            float rp = (float)chorPos - dt;
+            while (rp < 0.0f) rp += (float)cN;
+            const int i0 = (int)rp % cN;
+            const int i1 = (i0 + 1) % cN;
+            const float fr = rp - std::floor(rp);
+            const float wet = chorBuf[(size_t)i0] + (chorBuf[(size_t)i1] - chorBuf[(size_t)i0]) * fr;
+            chorPos = (chorPos + 1) % cN;
+
+            L += wet * chorMix;
+            R += wet * chorMix;
+        }
+
+        const int dN = (int)dlyBuf.size();
+        if (dN > 4 && dlyMix > 0.001f)
+        {
+            const int dtS = jlimit(1, dN - 1, (int)(dlyTime * sr));
+            const int readPos = (dlyPos - dtS + dN) % dN;
+            const float dOut = dlyBuf[(size_t)readPos];
+            dlyBuf[(size_t)dlyPos] = send + dOut * dlyFdb;
+            dlyPos = (dlyPos + 1) % dN;
+
+            L += dOut * dlyMix;
+            R += dOut * dlyMix;
+        }
+
+        if (revMix > 0.001f)
+        {
+            const float rv = processReverbSample(send);
+            L += rv * revMix;
+            R += rv * revMix;
+        }
+
+        // Master limiter + safety soft clip
+        const float peak = jmax(std::fabs(L), std::fabs(R));
+        compEnv = jmax(compEnv * 0.9997f, peak);
+        float g = 1.0f;
+        if (compEnv > 0.7f)
+        {
+            const float target = 0.7f / compEnv;
+            g = 1.0f + compAmt * (target - 1.0f);
+        }
+        L *= g;
+        R *= g;
+
+        L = std::tanh(L * 1.1f) / 1.1f;
+        R = std::tanh(R * 1.1f) / 1.1f;
+
+        left[i] = L;
+        right[i] = R;
     }
 
     midiMessages.clear();
@@ -692,7 +892,7 @@ void LPDrumMachineAudioProcessor::getStateInformation(MemoryBlock& destData)
 {
     auto state = apvts.copyState();
 
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < NV; ++i)
     {
         state.setProperty("midiNote_" + String(i), midiNoteMap[i], nullptr);
         state.setProperty("samplePath_" + String(i), samplePaths[i], nullptr);
@@ -713,7 +913,7 @@ void LPDrumMachineAudioProcessor::setStateInformation(const void* data, int size
             auto state = ValueTree::fromXml(*xmlState);
             apvts.replaceState(state);
 
-            for (int i = 0; i < 12; ++i)
+            for (int i = 0; i < NV; ++i)
             {
                 if (state.hasProperty("midiNote_" + String(i)))
                     midiNoteMap[i] = (int)state.getProperty("midiNote_" + String(i));
