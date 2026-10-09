@@ -26,6 +26,8 @@ private:
 
     Rectangle<int> cardRects[10];
 
+    std::unique_ptr<LookAndFeel> lnf;
+
     // Master
     Slider masterVolumeSlider, driveSlider;
     Label masterVolumeLabel, driveLabel;
@@ -70,6 +72,7 @@ private:
 
     // Presets
     ComboBox factoryCombo;
+    TextButton prevPresetButton, nextPresetButton;
     TextButton saveButton, loadButton;
     std::unique_ptr<FileChooser> chooser;
 

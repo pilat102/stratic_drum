@@ -335,9 +335,14 @@ void LPDrumMachineAudioProcessor::resetVoice(int index)
 // Presets (voice >= 0 = voice param, voice = -1 = global master FX)
 const char* LPDrumMachineAudioProcessor::factoryPresetNames[] = {
     "Factory Default", "Linkin Park Kit", "909 Electro", "LoFi Boom Bap",
-    "Analog 808", "Synthwave Pulse", "Horror Ritual", "Metal Forge"
+    "Analog 808", "Synthwave Pulse", "Horror Ritual", "Metal Forge",
+    "Acoustic Rock", "Jazz Brush", "Funk 70s", "Pop Session", "Country Road",
+    "Latin Percussion", "Afrobeat Groove", "Trap 808 Hard", "Techno Peak",
+    "House Classic", "Drum & Bass", "Dub Space", "Industrial Metal",
+    "Dark Ambient", "Cinema Hits", "Garage Rock", "Disco 70s",
+    "Reggae One Drop", "EDM Festival", "Synth Pop 80s", "World Percussion"
 };
-const int LPDrumMachineAudioProcessor::factoryPresetCount = 8;
+const int LPDrumMachineAudioProcessor::factoryPresetCount = 29;
 
 struct Ov { int voice; const char* base; float value; };
 
@@ -421,8 +426,198 @@ static const Ov metalOv[] = {
     { -1, "rev_mix", 0.12f }, { -1, "comp_amt", 0.6f }, { -1, "dly_mix", 0.0f }
 };
 
+// ---- Акустические и жанровые киты ----
+static const Ov acRockOv[] = {
+    { 0, "clk", 0.4f }, { 0, "dec", 0.28f }, { 0, "o1p", 55.0f },
+    { 1, "clk", 0.35f }, { 1, "nz", 0.9f }, { 1, "dec", 0.16f },
+    { 2, "dec", 0.04f }, { 3, "dec", 0.30f },
+    { 4, "dec", 0.35f }, { 5, "dec", 0.32f }, { 6, "dec", 0.28f },
+    { 7, "dec", 1.40f }, { 8, "dec", 0.70f },
+    { -1, "rev_mix", 0.22f }, { -1, "comp_amt", 0.5f }
+};
+
+static const Ov jazzOv[] = {
+    { 0, "o1p", 60.0f }, { 0, "dec", 0.22f }, { 0, "clk", 0.15f }, { 0, "vol", 0.7f },
+    { 1, "nz", 0.7f }, { 1, "o1l", 0.15f }, { 1, "dec", 0.14f }, { 1, "fc", 7000.0f },
+    { 2, "vol", 0.4f }, { 2, "dec", 0.05f }, { 3, "dec", 0.45f },
+    { 4, "vol", 0.6f }, { 5, "vol", 0.6f }, { 6, "vol", 0.6f },
+    { 7, "vol", 0.4f }, { 8, "vol", 0.7f }, { 8, "dec", 0.90f },
+    { -1, "rev_mix", 0.3f }, { -1, "rev_size", 0.7f }, { -1, "comp_amt", 0.2f }
+};
+
+static const Ov funkOv[] = {
+    { 0, "clk", 0.45f }, { 0, "dec", 0.20f },
+    { 1, "clk", 0.4f }, { 1, "dec", 0.12f }, { 1, "nz", 0.95f },
+    { 2, "dec", 0.03f }, { 3, "dec", 0.18f },
+    { 4, "dec", 0.25f }, { 5, "dec", 0.22f }, { 6, "dec", 0.20f },
+    { 10, "vol", 0.7f }, { 12, "vol", 0.5f }, { 13, "vol", 0.8f },
+    { -1, "rev_mix", 0.1f }, { -1, "comp_amt", 0.55f }
+};
+
+static const Ov popOv[] = {
+    { 0, "clk", 0.35f }, { 0, "dec", 0.25f },
+    { 1, "clk", 0.3f }, { 1, "dec", 0.14f },
+    { 2, "dec", 0.04f }, { 3, "dec", 0.28f },
+    { 7, "dec", 1.20f }, { 8, "dec", 0.60f }, { 12, "vol", 0.45f },
+    { -1, "rev_mix", 0.2f }, { -1, "comp_amt", 0.6f }
+};
+
+static const Ov countryOv[] = {
+    { 0, "clk", 0.4f }, { 0, "dec", 0.24f },
+    { 1, "clk", 0.35f }, { 1, "o1p", 220.0f }, { 1, "dec", 0.13f },
+    { 2, "dec", 0.04f }, { 3, "dec", 0.25f },
+    { 8, "dec", 0.70f },
+    { 10, "vol", 0.75f }, { 10, "clk", 0.3f }, { 12, "vol", 0.5f },
+    { -1, "rev_mix", 0.18f }, { -1, "comp_amt", 0.5f }
+};
+
+static const Ov latinOv[] = {
+    { 13, "vol", 0.9f }, { 13, "dec", 0.22f }, { 14, "vol", 0.7f },
+    { 12, "vol", 0.6f }, { 12, "dec", 0.05f }, { 11, "vol", 0.6f },
+    { 4, "o1p", 120.0f }, { 4, "dec", 0.20f },
+    { 5, "o1p", 160.0f }, { 5, "dec", 0.18f },
+    { 6, "o1p", 200.0f }, { 6, "dec", 0.16f },
+    { 0, "vol", 0.7f }, { 1, "vol", 0.6f },
+    { -1, "rev_mix", 0.15f }, { -1, "comp_amt", 0.4f }
+};
+
+static const Ov afroOv[] = {
+    { 13, "vol", 0.9f }, { 12, "vol", 0.65f }, { 10, "vol", 0.7f }, { 11, "vol", 0.65f },
+    { 1, "nz", 0.85f }, { 1, "dec", 0.14f }, { 0, "dec", 0.22f },
+    { 4, "dec", 0.30f }, { 5, "dec", 0.26f }, { 6, "dec", 0.24f },
+    { -1, "rev_mix", 0.12f }, { -1, "comp_amt", 0.45f }
+};
+
+static const Ov trapOv[] = {
+    { 15, "vol", 0.95f }, { 15, "dec", 0.70f }, { 15, "penv", 40.0f }, { 15, "o1p", 30.0f },
+    { 0, "dec", 0.12f }, { 0, "clk", 0.5f },
+    { 1, "dec", 0.09f }, { 1, "nz", 1.0f },
+    { 2, "dec", 0.02f }, { 3, "dec", 0.15f },
+    { 9, "res", 2.5f }, { 9, "dec", 0.20f },
+    { -1, "comp_amt", 0.6f }, { -1, "rev_mix", 0.05f }
+};
+
+static const Ov technoOv[] = {
+    { 0, "clk", 0.6f }, { 0, "dec", 0.14f }, { 0, "fxd", 1.8f }, { 0, "fc", 8000.0f },
+    { 1, "dec", 0.10f },
+    { 2, "lfot", 3.0f }, { 2, "lfos", 3.0f }, { 2, "lfor", 7.0f }, { 2, "lfod", 0.7f },
+    { 10, "vol", 0.7f }, { 10, "dec", 0.05f },
+    { -1, "comp_amt", 0.7f }, { -1, "dly_mix", 0.1f }, { -1, "dly_time", 0.19f }
+};
+
+static const Ov houseOv[] = {
+    { 0, "dec", 0.30f }, { 0, "penv", 140.0f },
+    { 1, "nz", 1.0f }, { 1, "o1l", 0.2f }, { 1, "dec", 0.16f },
+    { 2, "dec", 0.035f }, { 3, "dec", 0.45f },
+    { 9, "res", 2.8f }, { 9, "dec", 0.25f }, { 11, "vol", 0.5f },
+    { -1, "rev_mix", 0.15f }, { -1, "comp_amt", 0.5f }
+};
+
+static const Ov dnbOv[] = {
+    { 0, "dec", 0.15f }, { 0, "clk", 0.5f },
+    { 1, "dec", 0.10f }, { 1, "clk", 0.4f }, { 1, "nz", 1.0f },
+    { 2, "dec", 0.03f },
+    { 4, "o1w", 2.0f }, { 4, "dec", 0.25f },
+    { 5, "o1w", 2.0f }, { 5, "dec", 0.22f },
+    { 6, "o1w", 2.0f }, { 6, "dec", 0.20f },
+    { 12, "vol", 0.5f },
+    { -1, "comp_amt", 0.65f }, { -1, "rev_mix", 0.08f }
+};
+
+static const Ov dubOv[] = {
+    { 10, "vol", 0.8f }, { 10, "dec", 0.08f },
+    { 15, "vol", 0.9f }, { 15, "dec", 0.60f },
+    { 3, "dec", 0.50f },
+    { -1, "dly_mix", 0.4f }, { -1, "dly_time", 0.38f }, { -1, "dly_fdb", 0.5f },
+    { -1, "rev_mix", 0.3f }, { -1, "rev_size", 0.8f }, { -1, "comp_amt", 0.4f }
+};
+
+static const Ov industOv[] = {
+    { 0, "clk", 0.6f }, { 0, "dec", 0.14f }, { 0, "fxd", 2.2f },
+    { 1, "fxb", 10.0f }, { 1, "fxm", 2.0f }, { 1, "dec", 0.10f }, { 1, "clk", 0.45f },
+    { 2, "fxb", 12.0f },
+    { 4, "fxd", 1.8f }, { 5, "fxd", 1.8f }, { 6, "fxd", 1.8f },
+    { 7, "fxb", 10.0f }, { 7, "dec", 0.90f },
+    { -1, "comp_amt", 0.7f }, { -1, "rev_mix", 0.1f }
+};
+
+static const Ov ambientOv[] = {
+    { 0, "dec", 0.90f }, { 0, "o1p", 40.0f },
+    { 4, "dec", 1.20f }, { 4, "lfot", 2.0f }, { 4, "lfor", 0.3f }, { 4, "lfod", 0.4f },
+    { 5, "dec", 1.00f }, { 6, "dec", 0.90f }, { 7, "dec", 2.50f },
+    { -1, "rev_mix", 0.5f }, { -1, "rev_size", 0.95f },
+    { -1, "dly_mix", 0.2f }, { -1, "comp_amt", 0.3f }
+};
+
+static const Ov cinemaOv[] = {
+    { 0, "dec", 0.50f },
+    { 4, "dec", 1.00f }, { 4, "penv", 80.0f },
+    { 5, "dec", 0.90f }, { 5, "penv", 80.0f },
+    { 6, "dec", 0.80f }, { 7, "dec", 2.20f },
+    { 15, "dec", 0.80f }, { 15, "vol", 0.95f },
+    { -1, "rev_mix", 0.45f }, { -1, "rev_size", 0.9f }, { -1, "comp_amt", 0.7f }
+};
+
+static const Ov garageOv[] = {
+    { 0, "clk", 0.35f }, { 0, "dec", 0.26f },
+    { 1, "clk", 0.3f }, { 1, "dec", 0.15f },
+    { 2, "dec", 0.045f }, { 3, "dec", 0.30f },
+    { 4, "dec", 0.32f }, { 5, "dec", 0.30f }, { 6, "dec", 0.26f },
+    { 7, "dec", 1.30f },
+    { -1, "rev_mix", 0.2f }, { -1, "comp_amt", 0.45f }
+};
+
+static const Ov discoOv[] = {
+    { 0, "clk", 0.4f }, { 0, "dec", 0.22f },
+    { 1, "clk", 0.3f }, { 1, "dec", 0.13f },
+    { 3, "dec", 0.35f },
+    { 9, "dec", 0.20f }, { 9, "res", 2.2f },
+    { 11, "vol", 0.65f }, { 12, "vol", 0.55f },
+    { -1, "rev_mix", 0.15f }, { -1, "comp_amt", 0.5f }
+};
+
+static const Ov reggaeOv[] = {
+    { 0, "vol", 0.6f },
+    { 10, "vol", 0.85f }, { 10, "dec", 0.09f }, { 10, "clk", 0.25f },
+    { 15, "vol", 0.9f }, { 15, "dec", 0.55f },
+    { 2, "dec", 0.04f }, { 3, "dec", 0.30f }, { 8, "vol", 0.6f },
+    { -1, "rev_mix", 0.2f }, { -1, "dly_mix", 0.15f }, { -1, "comp_amt", 0.45f }
+};
+
+static const Ov edmOv[] = {
+    { 0, "clk", 0.5f }, { 0, "dec", 0.18f }, { 0, "penv", 120.0f },
+    { 2, "dec", 0.035f },
+    { 7, "dec", 1.30f },
+    { 9, "dec", 0.22f }, { 9, "res", 2.4f },
+    { 15, "vol", 0.7f }, { 15, "dec", 0.40f },
+    { -1, "comp_amt", 0.65f }, { -1, "rev_mix", 0.12f }
+};
+
+static const Ov synthpopOv[] = {
+    { 0, "dec", 0.20f },
+    { 1, "dec", 0.11f }, { 1, "nz", 1.0f }, { 1, "o1l", 0.1f }, { 1, "fxd", 1.6f },
+    { 2, "lfot", 3.0f }, { 2, "lfos", 3.0f }, { 2, "lfor", 6.0f }, { 2, "lfod", 0.5f },
+    { 6, "o1w", 2.0f }, { 6, "dec", 0.30f },
+    { -1, "chor_mix", 0.4f }, { -1, "rev_mix", 0.25f }, { -1, "comp_amt", 0.5f }
+};
+
+static const Ov worldOv[] = {
+    { 13, "vol", 0.9f }, { 13, "dec", 0.25f }, { 14, "vol", 0.75f },
+    { 12, "vol", 0.6f }, { 11, "vol", 0.6f }, { 10, "vol", 0.6f },
+    { 4, "o1p", 110.0f }, { 4, "dec", 0.28f },
+    { 5, "o1p", 150.0f }, { 5, "dec", 0.24f },
+    { 6, "o1p", 190.0f }, { 6, "dec", 0.20f },
+    { 0, "vol", 0.65f },
+    { -1, "rev_mix", 0.18f }, { -1, "comp_amt", 0.4f }
+};
+
 static const Ov* presetOv[] = { nullptr, lpKitOv, electroOv, lofiOv,
-                                     analog808Ov, synthwaveOv, horrorOv, metalOv };
+                                     analog808Ov, synthwaveOv, horrorOv, metalOv,
+                                     acRockOv, jazzOv, funkOv, popOv, countryOv,
+                                     latinOv, afroOv, trapOv, technoOv,
+                                     houseOv, dnbOv, dubOv, industOv,
+                                     ambientOv, cinemaOv, garageOv, discoOv,
+                                     reggaeOv, edmOv, synthpopOv, worldOv };
 static const int presetOvCount[] = { 0,
                                      numElementsInArray(lpKitOv),
                                      numElementsInArray(electroOv),
@@ -430,17 +625,44 @@ static const int presetOvCount[] = { 0,
                                      numElementsInArray(analog808Ov),
                                      numElementsInArray(synthwaveOv),
                                      numElementsInArray(horrorOv),
-                                     numElementsInArray(metalOv) };
+                                     numElementsInArray(metalOv),
+                                     numElementsInArray(acRockOv),
+                                     numElementsInArray(jazzOv),
+                                     numElementsInArray(funkOv),
+                                     numElementsInArray(popOv),
+                                     numElementsInArray(countryOv),
+                                     numElementsInArray(latinOv),
+                                     numElementsInArray(afroOv),
+                                     numElementsInArray(trapOv),
+                                     numElementsInArray(technoOv),
+                                     numElementsInArray(houseOv),
+                                     numElementsInArray(dnbOv),
+                                     numElementsInArray(dubOv),
+                                     numElementsInArray(industOv),
+                                     numElementsInArray(ambientOv),
+                                     numElementsInArray(cinemaOv),
+                                     numElementsInArray(garageOv),
+                                     numElementsInArray(discoOv),
+                                     numElementsInArray(reggaeOv),
+                                     numElementsInArray(edmOv),
+                                     numElementsInArray(synthpopOv),
+                                     numElementsInArray(worldOv) };
 
-static const float presetDrive[] = { 1.3f, 1.4f, 1.2f, 1.8f, 1.1f, 1.3f, 1.6f, 1.4f };
-static const float presetMaster[] = { 0.85f, 0.85f, 0.80f, 0.80f, 0.85f, 0.82f, 0.80f, 0.85f };
+static const float presetDrive[] = { 1.3f, 1.4f, 1.2f, 1.8f, 1.1f, 1.3f, 1.6f, 1.4f,
+                                      1.15f, 1.0f, 1.2f, 1.1f, 1.15f, 1.1f, 1.2f, 1.4f,
+                                      1.6f, 1.25f, 1.4f, 1.2f, 1.8f, 1.1f, 1.3f, 1.35f,
+                                      1.2f, 1.15f, 1.4f, 1.3f, 1.1f };
+static const float presetMaster[] = { 0.85f, 0.85f, 0.80f, 0.80f, 0.85f, 0.82f, 0.80f, 0.85f,
+                                      0.85f, 0.80f, 0.85f, 0.85f, 0.85f, 0.85f, 0.85f, 0.85f,
+                                      0.85f, 0.84f, 0.85f, 0.80f, 0.85f, 0.78f, 0.82f, 0.85f,
+                                      0.84f, 0.82f, 0.85f, 0.83f, 0.85f };
 
 void LPDrumMachineAudioProcessor::applyFactoryPreset(int index)
 {
     if (index < 0 || index >= factoryPresetCount)
         return;
 
-    for (int v = 0; v < NV; ++v)
+    for (int v = 0; v < NUM_VOICES; ++v)
         resetVoice(v);
 
     auto setP = [this](const String& id, float value)

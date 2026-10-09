@@ -1,24 +1,92 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <cmath>
+
 using namespace juce;
 
-static const Colour bgCol(0xff0b1016);
+static const Colour bgTop(0xff0d141b);
+static const Colour bgBottom(0xff060a0e);
 static const Colour cardCol(0xff101820);
 static const Colour lineCol(0xff1e3a45);
 static const Colour cyanCol(0xff35c8e8);
 static const Colour textDim(0xff8fa3ad);
 
+//==============================================================================
+// Custom Stratic look-and-feel
+struct StraticLookAndFeel : public LookAndFeel_V4
+{
+    void drawRotarySlider(Graphics& g, int x, int y, int width, int height,
+        float sliderPosProportional, float rotaryStartAngle,
+        float rotaryEndAngle, Slider&) override
+    {
+        const float radius = jmin((float)width, (float)height) * 0.5f - 4.0f;
+        const float cx = (float)x + (float)width * 0.5f;
+        const float cy = (float)y + (float)height * 0.5f;
+
+        // knob body
+        g.setColour(Colour(0xff141c24));
+        g.fillEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f);
+        g.setColour(lineCol);
+        g.drawEllipse(cx - radius, cy - radius, radius * 2.0f, radius * 2.0f, 1.0f);
+
+        // track arc
+        Path track;
+        track.addArc(cx - radius + 2.0f, cy - radius + 2.0f,
+            (radius - 2.0f) * 2.0f, (radius - 2.0f) * 2.0f,
+            rotaryStartAngle, rotaryEndAngle, true);
+        g.setColour(Colour(0xff22343c));
+        g.strokePath(track, PathStrokeType(3.0f, PathStrokeType::curved, PathStrokeType::rounded));
+
+        // value arc
+        const float angle = rotaryStartAngle + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
+        Path value;
+        value.addArc(cx - radius + 2.0f, cy - radius + 2.0f,
+            (radius - 2.0f) * 2.0f, (radius - 2.0f) * 2.0f,
+            rotaryStartAngle, angle, true);
+        g.setColour(cyanCol);
+        g.strokePath(value, PathStrokeType(3.0f, PathStrokeType::curved, PathStrokeType::rounded));
+
+        // glowing thumb dot
+        const float tx = cx + std::cos(angle) * radius * 0.60f;
+        const float ty = cy + std::sin(angle) * radius * 0.60f;
+        g.setColour(cyanCol.withAlpha(0.35f));
+        g.fillEllipse(tx - 4.5f, ty - 4.5f, 9.0f, 9.0f);
+        g.setColour(Colour(0xffd8f6ff));
+        g.fillEllipse(tx - 2.2f, ty - 2.2f, 4.4f, 4.4f);
+    }
+
+    void drawButtonBackground(Graphics& g, Button& button, const Colour&,
+        bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override
+    {
+        auto bounds = button.getLocalBounds().toFloat().reduced(1.0f, 1.0f);
+        const bool on = button.getToggleState();
+
+        Colour fill = on ? cyanCol : Colour(0xff0e141b);
+        if (shouldDrawButtonAsDown)          fill = fill.brighter(0.15f);
+        else if (shouldDrawButtonAsHighlighted) fill = fill.brighter(0.06f);
+
+        g.setColour(fill);
+        g.fillRoundedRectangle(bounds, 5.0f);
+        g.setColour(on ? cyanCol.brighter(0.25f) : lineCol);
+        g.drawRoundedRectangle(bounds, 5.0f, 1.0f);
+
+        g.setColour(on ? Colour(0xff05222b) : cyanCol);
+        g.setFont(12.0f);
+        g.drawText(button.getButtonText(), bounds, Justification::centred, true);
+    }
+};
+
+// (drawComboBox left default; colours set per-combo)
+
+//==============================================================================
 LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachineAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
     setSize(1150, 820);
 
-    auto styleButton = [](TextButton& b)
-        {
-            b.setColour(TextButton::buttonColourId, Colour(0xff0e141b));
-            b.setColour(TextButton::buttonOnColourId, cyanCol);
-        };
+    lnf = std::make_unique<StraticLookAndFeel>();
+    setLookAndFeel(lnf.get());
 
     // Master knobs
     addAndMakeVisible(masterVolumeSlider);
@@ -46,7 +114,6 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
         voiceButtons[i].setButtonText(LPDrumMachineAudioProcessor::voiceNames[i]);
         voiceButtons[i].setClickingTogglesState(true);
         voiceButtons[i].setRadioGroupId(42);
-        styleButton(voiceButtons[i]);
         voiceButtons[i].onClick = [this, i] { selectVoice(i); };
     }
     voiceButtons[0].setToggleState(true, dontSendNotification);
@@ -54,17 +121,14 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
     // Transport buttons
     addAndMakeVisible(learnButton);
     learnButton.setButtonText("Learn");
-    styleButton(learnButton);
     learnButton.onClick = [this] { audioProcessor.startLearning(selectedVoice); };
 
     addAndMakeVisible(testButton);
     testButton.setButtonText("Test");
-    styleButton(testButton);
     testButton.onClick = [this] { audioProcessor.triggerDrum(selectedVoice); };
 
     addAndMakeVisible(resetButton);
     resetButton.setButtonText("Reset");
-    styleButton(resetButton);
     resetButton.onClick = [this] { audioProcessor.resetVoice(selectedVoice); };
 
     addAndMakeVisible(noteLabel);
@@ -74,7 +138,6 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
     // Copy / Paste / Rand
     addAndMakeVisible(copyButton);
     copyButton.setButtonText("Copy");
-    styleButton(copyButton);
     copyButton.onClick = [this]
         {
             const int n = LPDrumMachineAudioProcessor::paramCount();
@@ -89,7 +152,6 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
 
     addAndMakeVisible(pasteButton);
     pasteButton.setButtonText("Paste");
-    styleButton(pasteButton);
     pasteButton.onClick = [this]
         {
             if (!hasClipboard) return;
@@ -104,7 +166,6 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
 
     addAndMakeVisible(randButton);
     randButton.setButtonText("Rand");
-    styleButton(randButton);
     randButton.onClick = [this]
         {
             Random r;
@@ -152,6 +213,8 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
         c->setColour(ComboBox::backgroundColourId, Colour(0xff0e141b));
         c->setColour(ComboBox::textColourId, cyanCol);
         c->setColour(ComboBox::outlineColourId, lineCol);
+        c->setColour(ComboBox::focusedOutlineColourId, cyanCol);
+        c->setColour(ComboBox::arrowColourId, cyanCol);
     }
 
     for (auto* t : { &osc1Title, &osc2Title, &noiseTitle, &filtTitle, &envTitle, &pitchTitle,
@@ -163,11 +226,8 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
         {
             s.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
             s.setTextBoxStyle(Slider::TextBoxBelow, false, 64, 16);
-            s.setColour(Slider::rotarySliderFillColourId, cyanCol);
-            s.setColour(Slider::rotarySliderOutlineColourId, lineCol);
-            s.setColour(Slider::thumbColourId, cyanCol);
             s.setColour(Slider::textBoxTextColourId, cyanCol);
-            s.setColour(Slider::textBoxBackgroundColourId, Colour(0xff0e141b));
+            s.setColour(Slider::textBoxBackgroundColourId, Colour(0x00000000));
             s.setColour(Slider::textBoxOutlineColourId, Colour(0x00000000));
             l.setText(text, dontSendNotification);
             l.setJustificationType(Justification::centred);
@@ -210,7 +270,6 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
     initSlider(revSize, revSizeLabel, "Rv Size");
     initSlider(compAmt, compAmtLabel, "Comp");
 
-    // Global master FX attachments
     auto ga = [this](Slider& s, const char* id)
         {
             globalAttachments.push_back(std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, id, s));
@@ -228,7 +287,6 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
     // Sample buttons
     addAndMakeVisible(loadSampleButton);
     loadSampleButton.setButtonText("Load SMP");
-    styleButton(loadSampleButton);
     loadSampleButton.onClick = [this]
         {
             sampleChooser = std::make_unique<FileChooser>("Load sample", File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3;*.ogg");
@@ -246,7 +304,6 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
 
     addAndMakeVisible(clearSampleButton);
     clearSampleButton.setButtonText("Clr");
-    styleButton(clearSampleButton);
     clearSampleButton.onClick = [this]
         {
             audioProcessor.clearSample(selectedVoice);
@@ -257,10 +314,26 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
     sampleInfoLabel.setText("(no sample)", dontSendNotification);
     sampleInfoLabel.setColour(Label::textColourId, textDim);
 
-    // Preset row
+    // Preset browser with arrows
+    addAndMakeVisible(prevPresetButton);
+    prevPresetButton.setButtonText("<");
+    addAndMakeVisible(nextPresetButton);
+    nextPresetButton.setButtonText(">");
+
+    auto stepPreset = [this](int dir)
+        {
+            const int n = LPDrumMachineAudioProcessor::factoryPresetCount;
+            int idx = factoryCombo.getSelectedItemIndex() + dir;
+            if (idx < 0) idx = n - 1;
+            if (idx >= n) idx = 0;
+            factoryCombo.setSelectedItemIndex(idx, dontSendNotification);
+            audioProcessor.applyFactoryPreset(idx);
+        };
+    prevPresetButton.onClick = [this, stepPreset] { stepPreset(-1); };
+    nextPresetButton.onClick = [this, stepPreset] { stepPreset(1); };
+
     addAndMakeVisible(saveButton);
     saveButton.setButtonText("Save");
-    styleButton(saveButton);
     saveButton.onClick = [this]
         {
             chooser = std::make_unique<FileChooser>("Save StraticDrum kit", File(), "*.lpdk");
@@ -279,7 +352,6 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
 
     addAndMakeVisible(loadButton);
     loadButton.setButtonText("Load");
-    styleButton(loadButton);
     loadButton.onClick = [this]
         {
             chooser = std::make_unique<FileChooser>("Load StraticDrum kit", File(), "*.lpdk");
@@ -311,6 +383,7 @@ LPDrumMachineAudioProcessorEditor::LPDrumMachineAudioProcessorEditor(LPDrumMachi
 LPDrumMachineAudioProcessorEditor::~LPDrumMachineAudioProcessorEditor()
 {
     stopTimer();
+    setLookAndFeel(nullptr);
 }
 
 void LPDrumMachineAudioProcessorEditor::selectVoice(int index)
@@ -398,8 +471,16 @@ void LPDrumMachineAudioProcessorEditor::timerCallback()
 
 void LPDrumMachineAudioProcessorEditor::paint(Graphics& g)
 {
-    g.fillAll(bgCol);
+    // gradient background
+    ColourGradient grad;
+    grad.point1 = Point<float>(0.0f, 0.0f);
+    grad.point2 = Point<float>(0.0f, (float)getHeight());
+    grad.addColour(0.0, bgTop);
+    grad.addColour(1.0, bgBottom);
+    g.setGradientFill(grad);
+    g.fillAll();
 
+    // cards + title underlines
     for (int i = 0; i < 10; ++i)
     {
         if (cardRects[i].isEmpty()) continue;
@@ -407,25 +488,34 @@ void LPDrumMachineAudioProcessorEditor::paint(Graphics& g)
         g.fillRoundedRectangle(cardRects[i].toFloat(), 6.0f);
         g.setColour(lineCol);
         g.drawRoundedRectangle(cardRects[i].toFloat(), 6.0f, 1.0f);
+        g.setColour(lineCol.withAlpha(0.7f));
+        g.drawLine((float)cardRects[i].getX() + 8.0f, (float)cardRects[i].getY() + 22.5f,
+            (float)cardRects[i].getRight() - 8.0f, (float)cardRects[i].getY() + 22.5f, 1.0f);
     }
 
+    // header
     auto hr = getLocalBounds().removeFromTop(44);
     g.setColour(cyanCol);
     g.setFont(20.0f);
-    g.drawText("STRATIC DRUM", hr.removeFromLeft(220), Justification::centredLeft);
+    g.drawText("STRATIC DRUM", hr.removeFromLeft(220).withX(16), Justification::centredLeft);
     g.setColour(textDim);
     g.setFont(12.0f);
     g.drawText("HYBRID DRUM SYNTH  |  JUCE 9  |  VST3", hr, Justification::centredRight);
+    g.setColour(lineCol);
+    g.drawLine(0.0f, 44.5f, (float)getWidth(), 44.5f, 1.0f);
 }
 
 void LPDrumMachineAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds().reduced(8);
 
-    // Header: presets + file buttons
+    // Header: logo space + preset browser + file buttons
     auto header = area.removeFromTop(44);
     header.removeFromLeft(230);
-    factoryCombo.setBounds(header.removeFromLeft(200).reduced(0, 8));
+    prevPresetButton.setBounds(header.removeFromLeft(30).reduced(2, 8));
+    factoryCombo.setBounds(header.removeFromLeft(190).reduced(0, 8));
+    nextPresetButton.setBounds(header.removeFromLeft(30).reduced(2, 8));
+    header.removeFromLeft(8);
     saveButton.setBounds(header.removeFromLeft(64).reduced(2, 8));
     loadButton.setBounds(header.removeFromLeft(64).reduced(2, 8));
     copyButton.setBounds(header.removeFromLeft(64).reduced(2, 8));
